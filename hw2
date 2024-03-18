@@ -1,0 +1,119 @@
+/// area 4154
+module I2S(
+  // Input signals
+  clk,
+  rst_n,
+  in_valid,
+  SD,
+  WS,
+  // Output signals
+  out_valid,
+  out_left,
+  out_right
+);
+//---------------------------------------------------------------------
+//   PORT DECLARATION
+//---------------------------------------------------------------------
+input clk, rst_n, in_valid;
+input SD, WS;
+
+output logic        out_valid;
+output logic [31:0] out_left, out_right;
+
+logic [31:0]in;
+logic [31:0]in_nxt;
+logic WS_temp;
+logic in_valid_temp;
+logic out_valid_nxt;
+///////////////////
+logic reset;
+logic data;
+logic data_nxt;
+logic [2:0] channel;
+logic [2:0] channel_nxt;
+//////// input
+always_ff @ (posedge clk or negedge rst_n) begin
+    if(!rst_n) begin
+      in <= 0;
+    end
+    else begin
+      in <= in_nxt;
+      data <= SD;
+  end
+end
+always_comb begin
+  if(!in_valid_temp) begin
+        in_nxt = 0;
+  end
+  else begin
+    data_nxt = data;
+    if(out_valid && in != 0) begin
+        in_nxt[0] = data_nxt;
+        in_nxt[31:1] = 0;
+    end
+    else begin
+      in_nxt[0] = data_nxt;
+      in_nxt[31:1] = in[30:0];
+    end
+  end
+end
+
+///// out valid
+always_ff @(posedge clk or negedge rst_n) begin
+  if(!rst_n) begin
+    out_valid <= 0;
+  end
+  else begin
+    WS_temp <= WS;
+    in_valid_temp <= in_valid;
+    out_valid <= out_valid_nxt;
+  end
+end
+always_comb begin
+  if( (WS != WS_temp && in_valid_temp) || (in_valid_temp && !in_valid) ) begin
+    out_valid_nxt = 1;
+  end
+  else begin
+    out_valid_nxt = 0;
+  end
+end
+
+////// output
+always_ff @(posedge clk) begin
+  reset <= rst_n;
+end
+always_ff @(posedge clk or negedge rst_n) begin
+  if(!rst_n) begin
+    channel <= 0;
+  end
+  else begin
+    channel <= channel_nxt;
+  end
+end
+always_comb begin
+  if(out_valid_nxt && in_valid_temp && WS_temp) begin
+    channel_nxt = 2; /// output right
+  end
+  else if(out_valid_nxt) begin
+    channel_nxt = 1; //// output left
+  end
+  else begin
+    channel_nxt = 0;
+  end
+end
+always_comb begin
+  if(!reset && !in_valid_temp) begin
+    out_left = 0;
+    out_right = 0;
+  end
+  else if(channel == 2)begin
+      out_left = 0;
+      out_right = in;
+    end
+  else begin
+      out_left = in;
+      out_right = 0;
+  end
+end
+
+endmodule

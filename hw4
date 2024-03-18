@@ -1,0 +1,285 @@
+//// MY pattern 01 02 03 all pass
+//total latency 100ns
+//area = 66780
+module HE(
+	// Input signals
+	clk,
+	rst_n,
+	in_valid,
+	in_image,
+  // Output signals
+	out_valid,
+	out_image
+);
+//---------------------------------------------------------------------
+//   INPUT AND OUTPUT DECLARATION                         
+//---------------------------------------------------------------------
+input				clk,rst_n,in_valid;
+input [7:0]			in_image;
+output logic 		out_valid;
+output logic [7:0]	out_image;
+//---------------------------------------------------------------------
+//   LOGIC DECLARATION                             
+//---------------------------------------------------------------------
+logic in_valid_temp;
+logic [7:0] in_image_temp;
+logic [2:0]count_index;
+logic [2:0]count_index_delay;
+logic [2:0] count_index_nxt;
+logic [1:0] state;
+logic [1:0] state_nxt;
+
+logic [10:0] cdf_nxt [0:7];
+logic [10:0] cdf_reg [0:7];
+logic [7:0] HE_index_nxt[0:7];
+logic [7:0] HE_index_reg[0:7];
+logic reset;
+logic out_valid_nxt;
+logic [7:0]out_image_nxt;
+
+logic [20:0] mul_nxt,mul_reg;
+//---------------------------------------------------------------------
+//   Finite-State Mechine                                          
+//--------------------------------------------------------------------
+parameter IDLE = 0;
+parameter READ = 1;
+parameter Transform = 2;
+always_ff @(posedge clk or negedge rst_n) begin
+	if(!rst_n) begin
+		state <= IDLE;
+	end
+	else begin
+		state <= state_nxt;
+	end
+end
+always_comb begin
+	case(state) 
+		IDLE: begin
+			if(count_index_delay == 7) state_nxt = READ;
+			else state_nxt = IDLE;
+		end
+		READ:begin
+			if(!in_valid) state_nxt = Transform;
+			else state_nxt = READ;
+		end
+		Transform:begin
+			if(count_index_delay == 7) state_nxt = IDLE;
+			else state_nxt = Transform;
+		end
+		default: state_nxt = IDLE;
+	endcase
+end
+
+//////////////////////////////////////////////// outvalid
+
+always_ff @( posedge clk or negedge rst_n ) begin 
+	if(!rst_n) begin
+		out_valid <= 0;
+	end
+	else begin
+		out_valid <= out_valid_nxt;
+	end
+end
+always_comb begin/
+	if(state == Transform  && count_index_delay < 7) begin
+		out_valid_nxt = 1;
+	end
+	else begin
+		out_valid_nxt = 0;
+end
+end
+////////////////////////////////////input
+always_ff @(posedge clk) begin 
+	in_image_temp <= in_image;
+	in_valid_temp <= in_valid;
+end
+//////////////////////////////////////// count index
+always_ff @(posedge clk or negedge rst_n) begin
+	if(!rst_n) begin
+		count_index <= 0;
+		count_index_delay <= 0;
+	end
+	else begin
+		count_index <= count_index_nxt;
+		count_index_delay <= count_index;
+	end
+end
+always_comb begin
+	if(in_valid == 1 && state_nxt == IDLE && count_index < 7 || state == Transform && count_index < 7) begin
+		count_index_nxt = count_index + 1;
+	end
+	else begin
+		count_index_nxt = 0;
+	end	
+end
+
+//////////////////////////////////////////// read pixel
+/////////////////////////////////////////////// calculate CDF
+always_ff @(posedge clk or negedge rst_n) begin
+	if(!rst_n) begin
+		cdf_reg[0] <= 0;
+		cdf_reg[1] <= 0;
+		cdf_reg[2] <= 0;
+		cdf_reg[3] <= 0;
+		cdf_reg[4] <= 0;
+		cdf_reg[5] <= 0;
+		cdf_reg[6] <= 0;
+		cdf_reg[7] <= 0;
+	end
+	else begin
+		cdf_reg[0] <= cdf_nxt[0];
+		cdf_reg[1] <= cdf_nxt[1];
+		cdf_reg[2] <= cdf_nxt[2];
+		cdf_reg[3] <= cdf_nxt[3];
+		cdf_reg[4] <= cdf_nxt[4];
+		cdf_reg[5] <= cdf_nxt[5];
+		cdf_reg[6] <= cdf_nxt[6];
+		cdf_reg[7] <= cdf_nxt[7];
+	end
+end
+always_comb begin
+	if(state == READ && in_valid_temp == 1) begin
+		if(in_image_temp <= HE_index_nxt[0] ) cdf_nxt[0] = cdf_reg[0] + 1;
+		else cdf_nxt[0] = cdf_reg[0];
+		if(in_image_temp <= HE_index_nxt[1] ) cdf_nxt[1] = cdf_reg[1] + 1;
+		else cdf_nxt[1] = cdf_reg[1];
+		if(in_image_temp <= HE_index_nxt[2] ) cdf_nxt[2] = cdf_reg[2] + 1;
+		else cdf_nxt[2] = cdf_reg[2];
+		if(in_image_temp <= HE_index_nxt[3] ) cdf_nxt[3] = cdf_reg[3] + 1;
+		else cdf_nxt[3] = cdf_reg[3];
+		if(in_image_temp <= HE_index_nxt[4] ) cdf_nxt[4] = cdf_reg[4] + 1;
+		else cdf_nxt[4] = cdf_reg[4];
+		if(in_image_temp <= HE_index_nxt[5] ) cdf_nxt[5] = cdf_reg[5] + 1;
+		else cdf_nxt[5] = cdf_reg[5];
+		if(in_image_temp <= HE_index_nxt[6] ) cdf_nxt[6] = cdf_reg[6] + 1;
+		else cdf_nxt[6] = cdf_reg[6];
+		if(in_image_temp <= HE_index_nxt[7] ) cdf_nxt[7] = cdf_reg[7] + 1;
+		else cdf_nxt[7] = cdf_reg[7];
+
+	end
+	else if(state == IDLE) begin
+		cdf_nxt[0] = 0;
+		cdf_nxt[1] = 0;
+		cdf_nxt[2] = 0;
+		cdf_nxt[3] = 0;
+		cdf_nxt[4] = 0;
+		cdf_nxt[5] = 0;
+		cdf_nxt[6] = 0;
+		cdf_nxt[7] = 0;
+	end
+	else begin
+		cdf_nxt[0] = cdf_reg[0];
+		cdf_nxt[1] = cdf_reg[1];
+		cdf_nxt[2] = cdf_reg[2];
+		cdf_nxt[3] = cdf_reg[3];
+		cdf_nxt[4] = cdf_reg[4];
+		cdf_nxt[5] = cdf_reg[5];
+		cdf_nxt[6] = cdf_reg[6];
+		cdf_nxt[7] = cdf_reg[7];
+	end
+end
+
+
+////////////////////////////////////////////////// histogram equalizer
+always_ff @(posedge clk) begin
+	HE_index_reg[0] <= HE_index_nxt[0];
+	HE_index_reg[1] <= HE_index_nxt[1];
+	HE_index_reg[2] <= HE_index_nxt[2];
+	HE_index_reg[3] <= HE_index_nxt[3];
+	HE_index_reg[4] <= HE_index_nxt[4];
+	HE_index_reg[5] <= HE_index_nxt[5];
+	HE_index_reg[6] <= HE_index_nxt[6];
+	HE_index_reg[7] <= HE_index_nxt[7];
+end
+always_comb begin
+	if(in_valid_temp && state == IDLE && count_index_delay < 8) begin
+		
+		if(count_index_delay == 0) HE_index_nxt[0] = in_image_temp;
+		else HE_index_nxt[0] = HE_index_reg[0];
+		if(count_index_delay == 1) HE_index_nxt[1] = in_image_temp;
+		else HE_index_nxt[1] = HE_index_reg[1];
+		if(count_index_delay == 2) HE_index_nxt[2] = in_image_temp;
+		else HE_index_nxt[2] = HE_index_reg[2];
+		if(count_index_delay == 3) HE_index_nxt[3] = in_image_temp;
+		else HE_index_nxt[3] = HE_index_reg[3];
+		if(count_index_delay == 4) HE_index_nxt[4] = in_image_temp;
+		else HE_index_nxt[4] = HE_index_reg[4];
+		if(count_index_delay == 5) HE_index_nxt[5] = in_image_temp;
+		else HE_index_nxt[5] = HE_index_reg[5];
+		if(count_index_delay == 6) HE_index_nxt[6] = in_image_temp;
+		else HE_index_nxt[6] = HE_index_reg[6];
+		if(count_index_delay == 7) HE_index_nxt[7] = in_image_temp;
+		else HE_index_nxt[7] = HE_index_reg[7];
+	end
+	else begin
+		HE_index_nxt[0] = HE_index_reg[0];
+		HE_index_nxt[1] = HE_index_reg[1];
+		HE_index_nxt[2] = HE_index_reg[2];
+		HE_index_nxt[3] = HE_index_reg[3];
+		HE_index_nxt[4] = HE_index_reg[4];
+		HE_index_nxt[5] = HE_index_reg[5];
+		HE_index_nxt[6] = HE_index_reg[6];
+		HE_index_nxt[7] = HE_index_reg[7];
+	end
+end
+
+/////////////////////////////// out image pipeline
+always_ff @(posedge clk or negedge rst_n) begin
+	if(!rst_n) begin
+		out_image <= 0;
+	end
+	else begin
+		out_image <= out_image_nxt;
+	end
+end
+always_ff @(posedge clk) begin
+	mul_reg <= mul_nxt;
+end
+always_comb begin
+	if(!out_valid_nxt) begin
+		if(in_valid_temp != in_valid) begin
+			mul_nxt = cdf_nxt[0] * 937;
+		end
+		else begin
+			mul_nxt = 0;
+		end
+		out_image_nxt = 0;
+	end
+	else begin
+		case (count_index)
+			0: begin
+				out_image_nxt = mul_reg / 4093 - 1;
+				mul_nxt = cdf_nxt[1] * 937;
+			end
+			1: begin
+				out_image_nxt = mul_reg / 4093 - 1;
+				mul_nxt = cdf_nxt[2] * 937;
+			end
+			2: begin
+				out_image_nxt = mul_reg / 4093 - 1;
+				mul_nxt = cdf_nxt[3] * 937;
+			end
+			3: begin
+				out_image_nxt = mul_reg / 4093 - 1;
+				mul_nxt = cdf_nxt[4] * 937;
+			end
+			4: begin
+				out_image_nxt = mul_reg / 4093 - 1;
+				mul_nxt = cdf_nxt[5] * 937;
+			end
+			5: begin
+				out_image_nxt = mul_reg / 4093 - 1;
+				mul_nxt = cdf_nxt[6] * 937;
+			end
+			6: begin
+				out_image_nxt = mul_reg / 4093 - 1;
+				mul_nxt = cdf_nxt[7] * 937;
+			end
+			default: begin out_image_nxt = 0; mul_nxt = 0; end
+		endcase
+		if(mul_reg/4093 < 1) out_image_nxt = 0;
+		else out_image_nxt = mul_reg /4093 - 1;
+	end
+end
+
+endmodule
