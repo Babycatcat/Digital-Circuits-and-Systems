@@ -1,0 +1,198 @@
+
+module inter(
+  // Input signals
+  clk,
+  rst_n,
+  in_valid_1,
+  in_valid_2,
+  data_in_1,
+  data_in_2,
+  ready_slave1,
+  ready_slave2,
+  // Output signals
+  valid_slave1,
+  valid_slave2,
+  addr_out,
+  value_out,
+  handshake_slave1,
+  handshake_slave2
+);
+
+//---------------------------------------------------------------------
+//   PORT DECLARATION
+//---------------------------------------------------------------------
+input clk, rst_n, in_valid_1, in_valid_2;
+input [6:0] data_in_1, data_in_2; 
+input ready_slave1, ready_slave2;
+/////////////////////////////////////
+output logic valid_slave1, valid_slave2;
+output logic [2:0] addr_out, value_out;
+output logic handshake_slave1, handshake_slave2;
+////////////////////////////////////////
+logic [1:0] st, n_st;
+logic [6:0] data_1_reg, data_2_reg, data_1_receive, data_2_receive;
+logic in1, in1_temp, in2, in2_temp;
+parameter S_master1=1,
+		  S_master2=2,
+          S_handshake=3,
+          S_IDLE=0;
+`define   slave1 			 0
+`define   slave2 			 1
+`define   slave_select_1 data_1_reg[6]
+`define   slave_select_2 data_2_reg[6]
+`define   address_1			 data_1_reg[5:3]
+`define   address_2 		 data_2_reg[5:3]
+`define   value_1   		 data_1_reg[2:0]
+`define   value_2   		 data_2_reg[2:0]
+
+////////////////////////////////////
+
+always @(posedge clk, negedge rst_n)begin
+	if(!rst_n)begin
+		//reset
+		st  <= S_IDLE;//reset
+	end
+	else begin 
+		st  <= n_st;
+		data_1_reg <= data_1_receive;
+		data_2_reg <= data_2_receive;
+		in1 <= in1_temp;
+		in2 <= in2_temp;
+	end
+end
+always@(*)begin
+	case(st)
+		S_IDLE:begin //receive data_in
+			if(in_valid_1)begin
+				//reg
+				data_1_receive = data_in_1;
+				if(in_valid_2)
+					data_2_receive = data_in_2;
+				else
+					data_2_receive = 0;
+				in1_temp = in_valid_1;
+				in2_temp = in_valid_2;
+				//n_st
+				n_st = S_master1;
+				
+			end
+			else if(in_valid_2)begin //in_valid_1 = 0 , in_valid_2 = 1
+				//reg
+				data_1_receive = 0;
+				data_2_receive = data_in_2;
+				in1_temp = in_valid_1;
+				in2_temp = in_valid_2;
+				//n_st
+				n_st = S_master2;
+			end
+			else begin
+				//reg
+				data_1_receive = 0;
+				data_2_receive = 0;
+				in1_temp = 0;
+				in2_temp = 0;
+				//n_st
+				n_st = S_IDLE;
+			end
+			//output
+			valid_slave1 = 0;
+			valid_slave2 = 0;
+			addr_out	 = 0;
+			value_out 	 = 0;
+			handshake_slave1 = 0;
+			handshake_slave2 = 0;
+		end
+		S_master1:begin
+			//reg
+			data_1_receive = data_1_reg;
+			data_2_receive = data_2_reg;
+			in1_temp = in1;
+			in2_temp = in2;
+			//output
+			valid_slave1 = ((`slave_select_1) == (`slave1))?1:0;
+			valid_slave2 = ((`slave_select_1) == (`slave2))?1:0;
+			addr_out	 = `address_1;
+			value_out 	 = `value_1;
+			handshake_slave1 = 0;
+			handshake_slave2 = 0;
+			//n_st
+			if((ready_slave1 && valid_slave1)||(ready_slave2 && valid_slave2))begin
+				n_st = S_handshake;
+			end
+			else begin 
+				n_st = S_master1;
+			end
+		end
+		S_master2:begin
+			//reg
+			data_1_receive = data_1_reg;
+			data_2_receive = data_2_reg;
+			in1_temp = 0;
+			in2_temp = in2;
+			//output
+			valid_slave1 = ((`slave_select_2) == (`slave1))?1:0;
+			valid_slave2 = ((`slave_select_2) == (`slave2))?1:0;
+			addr_out	 = `address_2;
+			value_out 	 = `value_2;
+			handshake_slave1 = 0;
+			handshake_slave2 = 0;
+			//n_st
+			if((ready_slave1 && valid_slave1)||(ready_slave2 && valid_slave2))begin
+				n_st = S_handshake;
+			end
+			else begin 
+				n_st = S_master2;
+			end
+			
+		end
+		S_handshake:begin
+			//st
+			if(in1&&in2)begin
+				n_st = S_master2;
+				data_1_receive = 0;
+				data_2_receive = data_2_reg;
+			end
+			else begin
+				n_st = S_IDLE;
+				//reg
+				data_1_receive = 0;
+				data_2_receive = 0;
+			end		
+			//reg
+			in1_temp = 0;
+			in2_temp = in2;
+			//output
+			valid_slave1 = ((`slave_select_1) == (`slave1))?1:0;
+			valid_slave2 = ((`slave_select_1) == (`slave2))?1:0;
+			if(in1)begin
+				addr_out = `address_1;
+				value_out = `value_1;
+			end
+			else begin
+				addr_out = `address_2;
+				value_out = `value_2;
+			end
+			handshake_slave1 = ((`slave_select_1) == (`slave1))?1:0;
+			handshake_slave2 = ((`slave_select_1) == (`slave2))?1:0;
+
+			
+		end
+		default:begin
+			//reg & st
+			n_st = S_IDLE;
+			data_1_receive = 0;
+			data_2_receive = 0;
+			//output
+			valid_slave1 = 0;
+			valid_slave2 = 0;
+			addr_out	 = 0;
+			value_out 	 = 0;
+			handshake_slave1 = 0;
+			handshake_slave2 = 0;
+		end
+	endcase
+end
+
+
+endmodule
+
